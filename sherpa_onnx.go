@@ -1979,6 +1979,22 @@ type OfflineSpeechDenoiser struct {
 	impl *C.struct_SherpaOnnxOfflineSpeechDenoiser
 }
 
+type OnlineSpeechDenoiserGtcrnModelConfig = OfflineSpeechDenoiserGtcrnModelConfig
+type OnlineSpeechDenoiserModelConfig = OfflineSpeechDenoiserModelConfig
+
+type OnlineSpeechDenoiserConfig struct {
+	Model    OnlineSpeechDenoiserModelConfig
+	PoolSize int32
+}
+
+type OnlineSpeechDenoiserEngine struct {
+	impl *C.struct_SherpaOnnxOnlineSpeechDenoiserEngine
+}
+
+type OnlineSpeechDenoiserStream struct {
+	impl *C.struct_SherpaOnnxOnlineSpeechDenoiserStream
+}
+
 type DenoisedAudio struct {
 	// Normalized samples in the range [-1, 1]
 	Samples []float32
@@ -1990,6 +2006,72 @@ type DenoisedAudio struct {
 func DeleteOfflineSpeechDenoiser(sd *OfflineSpeechDenoiser) {
 	C.SherpaOnnxDestroyOfflineSpeechDenoiser(sd.impl)
 	sd.impl = nil
+}
+
+func NewOnlineSpeechDenoiserEngine(config *OnlineSpeechDenoiserConfig) *OnlineSpeechDenoiserEngine {
+	if config == nil {
+		return nil
+	}
+
+	c := C.struct_SherpaOnnxOnlineSpeechDenoiserConfig{}
+	c.model.gtcrn.model = C.CString(config.Model.Gtcrn.Model)
+	defer C.free(unsafe.Pointer(c.model.gtcrn.model))
+
+	c.model.num_threads = C.int(config.Model.NumThreads)
+	c.model.debug = C.int(config.Model.Debug)
+
+	c.model.provider = C.CString(config.Model.Provider)
+	defer C.free(unsafe.Pointer(c.model.provider))
+
+	impl := C.SherpaOnnxCreateOnlineSpeechDenoiserEngine(&c, C.int(config.PoolSize))
+	if impl == nil {
+		return nil
+	}
+
+	return &OnlineSpeechDenoiserEngine{impl: impl}
+}
+
+func DeleteOnlineSpeechDenoiserEngine(engine *OnlineSpeechDenoiserEngine) {
+	if engine == nil || engine.impl == nil {
+		return
+	}
+	C.SherpaOnnxDestroyOnlineSpeechDenoiserEngine(engine.impl)
+	engine.impl = nil
+}
+
+func (engine *OnlineSpeechDenoiserEngine) CreateStream() *OnlineSpeechDenoiserStream {
+	if engine == nil || engine.impl == nil {
+		return nil
+	}
+
+	impl := C.SherpaOnnxOnlineSpeechDenoiserEngineCreateStream(engine.impl)
+	if impl == nil {
+		return nil
+	}
+
+	return &OnlineSpeechDenoiserStream{impl: impl}
+}
+
+func DeleteOnlineSpeechDenoiserStream(stream *OnlineSpeechDenoiserStream) {
+	if stream == nil || stream.impl == nil {
+		return
+	}
+	C.SherpaOnnxDestroyOnlineSpeechDenoiserStream(stream.impl)
+	stream.impl = nil
+}
+
+func (engine *OnlineSpeechDenoiserEngine) SampleRate() int {
+	if engine == nil || engine.impl == nil {
+		return 0
+	}
+	return int(C.SherpaOnnxOnlineSpeechDenoiserEngineGetSampleRate(engine.impl))
+}
+
+func (engine *OnlineSpeechDenoiserEngine) FrameShiftInSamples() int {
+	if engine == nil || engine.impl == nil {
+		return 0
+	}
+	return int(C.SherpaOnnxOnlineSpeechDenoiserEngineGetFrameShiftInSamples(engine.impl))
 }
 
 // The user is responsible to invoke [DeleteOfflineSpeechDenoiser]() to free
@@ -2016,20 +2098,49 @@ func NewOfflineSpeechDenoiser(config *OfflineSpeechDenoiserConfig) *OfflineSpeec
 }
 
 func (sd *OfflineSpeechDenoiser) Run(samples []float32, sampleRate int) *DenoisedAudio {
+	if len(samples) == 0 {
+		return nil
+	}
+
 	audio := C.SherpaOnnxOfflineSpeechDenoiserRun(sd.impl, (*C.float)(&samples[0]), C.int(len(samples)), C.int(sampleRate))
 	defer C.SherpaOnnxDestroyDenoisedAudio(audio)
 
-	ans := &DenoisedAudio{}
-	ans.SampleRate = int(audio.sample_rate)
-	n := int(audio.n)
-	ans.Samples = make([]float32, n)
+	return newDenoisedAudio(audio)
+}
 
-	denoisedSamples := unsafe.Slice(audio.samples, n)
-	for i := 0; i < n; i++ {
-		ans.Samples[i] = float32(denoisedSamples[i])
+func (stream *OnlineSpeechDenoiserStream) Run(samples []float32, sampleRate int) *DenoisedAudio {
+	if stream == nil || stream.impl == nil || len(samples) == 0 {
+		return nil
 	}
 
-	return ans
+	audio := C.SherpaOnnxOnlineSpeechDenoiserStreamRun(stream.impl, (*C.float)(&samples[0]), C.int(len(samples)), C.int(sampleRate))
+	if audio == nil {
+		return nil
+	}
+	defer C.SherpaOnnxDestroyDenoisedAudio(audio)
+
+	return newDenoisedAudio(audio)
+}
+
+func (stream *OnlineSpeechDenoiserStream) Flush() *DenoisedAudio {
+	if stream == nil || stream.impl == nil {
+		return nil
+	}
+
+	audio := C.SherpaOnnxOnlineSpeechDenoiserStreamFlush(stream.impl)
+	if audio == nil {
+		return nil
+	}
+	defer C.SherpaOnnxDestroyDenoisedAudio(audio)
+
+	return newDenoisedAudio(audio)
+}
+
+func (stream *OnlineSpeechDenoiserStream) Reset() {
+	if stream == nil || stream.impl == nil {
+		return
+	}
+	C.SherpaOnnxOnlineSpeechDenoiserStreamReset(stream.impl)
 }
 
 func (audio *DenoisedAudio) Save(filename string) bool {
@@ -2043,6 +2154,28 @@ func (audio *DenoisedAudio) Save(filename string) bool {
 
 func (sd *OfflineSpeechDenoiser) SampleRate() int {
 	return int(C.SherpaOnnxOfflineSpeechDenoiserGetSampleRate(sd.impl))
+}
+
+func newDenoisedAudio(audio *C.struct_SherpaOnnxDenoisedAudio) *DenoisedAudio {
+	if audio == nil {
+		return nil
+	}
+
+	ans := &DenoisedAudio{}
+	ans.SampleRate = int(audio.sample_rate)
+	n := int(audio.n)
+	ans.Samples = make([]float32, n)
+
+	if n == 0 {
+		return ans
+	}
+
+	denoisedSamples := unsafe.Slice(audio.samples, n)
+	for i := 0; i < n; i++ {
+		ans.Samples[i] = float32(denoisedSamples[i])
+	}
+
+	return ans
 }
 
 func GetVersion() string {

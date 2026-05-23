@@ -1740,6 +1740,52 @@ SherpaOnnxOfflineSpeechDenoiserRun(const SherpaOnnxOfflineSpeechDenoiser *sd,
 SHERPA_ONNX_API void SherpaOnnxDestroyDenoisedAudio(
     const SherpaOnnxDenoisedAudio *p);
 
+// =========================================================================
+// For shared-engine streaming speech enhancement
+// =========================================================================
+SHERPA_ONNX_API typedef struct SherpaOnnxOnlineSpeechDenoiserConfig {
+  SherpaOnnxOfflineSpeechDenoiserModelConfig model;
+} SherpaOnnxOnlineSpeechDenoiserConfig;
+
+SHERPA_ONNX_API typedef struct SherpaOnnxOnlineSpeechDenoiserEngine
+    SherpaOnnxOnlineSpeechDenoiserEngine;
+
+SHERPA_ONNX_API typedef struct SherpaOnnxOnlineSpeechDenoiserStream
+    SherpaOnnxOnlineSpeechDenoiserStream;
+
+SHERPA_ONNX_API const SherpaOnnxOnlineSpeechDenoiserEngine *
+SherpaOnnxCreateOnlineSpeechDenoiserEngine(
+    const SherpaOnnxOnlineSpeechDenoiserConfig *config, int32_t pool_size);
+
+SHERPA_ONNX_API void SherpaOnnxDestroyOnlineSpeechDenoiserEngine(
+    const SherpaOnnxOnlineSpeechDenoiserEngine *engine);
+
+SHERPA_ONNX_API const SherpaOnnxOnlineSpeechDenoiserStream *
+SherpaOnnxOnlineSpeechDenoiserEngineCreateStream(
+    const SherpaOnnxOnlineSpeechDenoiserEngine *engine);
+
+SHERPA_ONNX_API void SherpaOnnxDestroyOnlineSpeechDenoiserStream(
+    const SherpaOnnxOnlineSpeechDenoiserStream *stream);
+
+SHERPA_ONNX_API int32_t SherpaOnnxOnlineSpeechDenoiserEngineGetSampleRate(
+    const SherpaOnnxOnlineSpeechDenoiserEngine *engine);
+
+SHERPA_ONNX_API int32_t
+SherpaOnnxOnlineSpeechDenoiserEngineGetFrameShiftInSamples(
+    const SherpaOnnxOnlineSpeechDenoiserEngine *engine);
+
+SHERPA_ONNX_API const SherpaOnnxDenoisedAudio *
+SherpaOnnxOnlineSpeechDenoiserStreamRun(
+    const SherpaOnnxOnlineSpeechDenoiserStream *stream, const float *samples,
+    int32_t n, int32_t sample_rate);
+
+SHERPA_ONNX_API const SherpaOnnxDenoisedAudio *
+SherpaOnnxOnlineSpeechDenoiserStreamFlush(
+    const SherpaOnnxOnlineSpeechDenoiserStream *stream);
+
+SHERPA_ONNX_API void SherpaOnnxOnlineSpeechDenoiserStreamReset(
+    const SherpaOnnxOnlineSpeechDenoiserStream *stream);
+
 #ifdef __OHOS__
 
 // It is for HarmonyOS
