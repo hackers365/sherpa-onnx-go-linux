@@ -11,6 +11,9 @@ func TestOnlineSpeechDenoiserEngineAPICompile(t *testing.T) {
 			NumThreads: 1,
 			Debug:      0,
 			Provider:   "cpu",
+			DpdfNet: OfflineSpeechDenoiserDpdfNetModelConfig{
+				Model: "",
+			},
 		},
 		PoolSize: 1,
 	}
