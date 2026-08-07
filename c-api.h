@@ -4296,6 +4296,94 @@ SHERPA_ONNX_API void SherpaOnnxOnlineSpeechDenoiserReset(
     const SherpaOnnxOnlineSpeechDenoiser *sd);
 
 // =========================================================================
+// For shared-engine streaming speech enhancement
+// =========================================================================
+
+/** @brief Opaque shared online speech denoiser engine handle. */
+typedef struct SherpaOnnxOnlineSpeechDenoiserEngine
+    SherpaOnnxOnlineSpeechDenoiserEngine;
+
+/** @brief Opaque per-stream online speech denoiser state handle. */
+typedef struct SherpaOnnxOnlineSpeechDenoiserStream
+    SherpaOnnxOnlineSpeechDenoiserStream;
+
+/**
+ * @brief Create a shared online speech denoiser engine.
+ *
+ * The first version of this API supports GTCRN only. The engine owns a pool of
+ * model sessions. Create one engine per model and one stream per audio
+ * connection. If pool_size <= 0, a default based on hardware concurrency is
+ * used.
+ *
+ * @param config Online denoiser configuration.
+ * @param pool_size Number of model sessions in the engine pool.
+ * @return A newly allocated engine on success, or NULL on error.
+ */
+SHERPA_ONNX_API const SherpaOnnxOnlineSpeechDenoiserEngine *
+SherpaOnnxCreateOnlineSpeechDenoiserEngine(
+    const SherpaOnnxOnlineSpeechDenoiserConfig *config, int32_t pool_size);
+
+/**
+ * @brief Destroy a shared online speech denoiser engine.
+ *
+ * Existing streams keep the engine internals alive until those streams are also
+ * destroyed.
+ */
+SHERPA_ONNX_API void SherpaOnnxDestroyOnlineSpeechDenoiserEngine(
+    const SherpaOnnxOnlineSpeechDenoiserEngine *engine);
+
+/**
+ * @brief Create per-connection stream state from a shared engine.
+ */
+SHERPA_ONNX_API const SherpaOnnxOnlineSpeechDenoiserStream *
+SherpaOnnxOnlineSpeechDenoiserEngineCreateStream(
+    const SherpaOnnxOnlineSpeechDenoiserEngine *engine);
+
+/**
+ * @brief Destroy per-connection stream state.
+ */
+SHERPA_ONNX_API void SherpaOnnxDestroyOnlineSpeechDenoiserStream(
+    const SherpaOnnxOnlineSpeechDenoiserStream *stream);
+
+/**
+ * @brief Return the expected input sample rate for the shared engine.
+ */
+SHERPA_ONNX_API int32_t SherpaOnnxOnlineSpeechDenoiserEngineGetSampleRate(
+    const SherpaOnnxOnlineSpeechDenoiserEngine *engine);
+
+/**
+ * @brief Return the recommended chunk size in samples for streams created by
+ * this engine.
+ */
+SHERPA_ONNX_API int32_t
+SherpaOnnxOnlineSpeechDenoiserEngineGetFrameShiftInSamples(
+    const SherpaOnnxOnlineSpeechDenoiserEngine *engine);
+
+/**
+ * @brief Process one chunk of streaming audio with per-connection state.
+ *
+ * This function is not thread-safe for the same stream. Different streams can
+ * be run concurrently.
+ */
+SHERPA_ONNX_API const SherpaOnnxDenoisedAudio *
+SherpaOnnxOnlineSpeechDenoiserStreamRun(
+    const SherpaOnnxOnlineSpeechDenoiserStream *stream, const float *samples,
+    int32_t n, int32_t sample_rate);
+
+/**
+ * @brief Flush and reset one stream state.
+ */
+SHERPA_ONNX_API const SherpaOnnxDenoisedAudio *
+SherpaOnnxOnlineSpeechDenoiserStreamFlush(
+    const SherpaOnnxOnlineSpeechDenoiserStream *stream);
+
+/**
+ * @brief Reset one stream state.
+ */
+SHERPA_ONNX_API void SherpaOnnxOnlineSpeechDenoiserStreamReset(
+    const SherpaOnnxOnlineSpeechDenoiserStream *stream);
+
+// =========================================================================
 // Source separation
 // =========================================================================
 
@@ -4611,72 +4699,6 @@ SherpaOnnxCreateOfflineSourceSeparationOHOS(
     const SherpaOnnxOfflineSourceSeparationConfig *config,
     NativeResourceManager *mgr);
 #endif
-
-// ============================================================
-// For diacritization
-// ============================================================
-
-/**
- * @brief Offline diacritization model configuration.
- */
-typedef struct SherpaOnnxOfflineDiacritizationModelConfig {
-  /** Offline diacritization encoder model file. */
-  const char *catt_encoder;
-  /** Offline diacritization decoder model file. */
-  const char *catt_decoder;
-  /** Number of inference threads. */
-  int32_t num_threads;
-  /** Non-zero to print debug information. */
-  int32_t debug;
-  /** Execution provider such as `"cpu"`. */
-  const char *provider;
-} SherpaOnnxOfflineDiacritizationModelConfig;
-
-/** @brief Configuration for offline diacritization. */
-typedef struct SherpaOnnxOfflineDiacritizationConfig {
-  /** Model configuration. */
-  SherpaOnnxOfflineDiacritizationModelConfig model;
-} SherpaOnnxOfflineDiacritizationConfig;
-
-/** @brief Opaque offline diacritization handle. */
-typedef struct SherpaOnnxOfflineDiacritization SherpaOnnxOfflineDiacritization;
-
-/**
- * @brief Create an offline diacritization processor.
- *
- * @param config Offline diacritization configuration.
- * @return A newly allocated diacritization processor on success, or NULL on
- *         error. Free it with SherpaOnnxDestroyOfflineDiacritization().
- */
-SHERPA_ONNX_API const SherpaOnnxOfflineDiacritization *
-SherpaOnnxCreateOfflineDiacritization(
-    const SherpaOnnxOfflineDiacritizationConfig *config);
-
-/**
- * @brief Destroy an offline diacritization processor.
- *
- * @param diacrt A pointer returned by SherpaOnnxCreateOfflineDiacritization().
- */
-SHERPA_ONNX_API void SherpaOnnxDestroyOfflineDiacritization(
-    const SherpaOnnxOfflineDiacritization *diacrt);
-
-/**
- * @brief Add diacritics to a complete input text.
- *
- * @param diacrt A pointer returned by SherpaOnnxCreateOfflineDiacritization().
- * @param text Input text without diacritics.
- * @return A newly allocated diacritized string. Free it with
- *         SherpaOfflineDiacritizationFreeText().
- */
-SHERPA_ONNX_API const char *SherpaOfflineDiacritizationAddDiacritics(
-    const SherpaOnnxOfflineDiacritization *diacrt, const char *text);
-
-/**
- * @brief Free a string returned by SherpaOfflineDiacritizationAddDiacritics().
- *
- * @param text A pointer returned by SherpaOfflineDiacritizationAddDiacritics().
- */
-SHERPA_ONNX_API void SherpaOfflineDiacritizationFreeText(const char *text);
 
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
